@@ -31,7 +31,7 @@ int read_proc_info(pid_t pid, ProcInfo *info)
     info->name[0] = '\0';
     info->cmdline[0] = '\0';
 
-    sprintf(chemin, "/proc/%d/status", pid);
+    snprintf(chemin, sizeof(chemin), "/proc/%d/status", pid);
     f = fopen(chemin, "r");
     if (!f) return -1;
 
@@ -43,7 +43,7 @@ int read_proc_info(pid_t pid, ProcInfo *info)
     }
     fclose(f);
 
-    sprintf(chemin, "/proc/%d/cmdline", pid);
+    snprintf(chemin, sizeof(chemin), "/proc/%d/cmdline", pid);
     f = fopen(chemin, "r");
     if (f) {
         int len = fread(info->cmdline, 1, 1023, f);

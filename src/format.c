@@ -24,7 +24,7 @@ static unsigned long entry_kbytes(const MapEntry *e)
     return e->size_kb;
 }
 
-int entry_in_range(const MapEntry *e, const Options *opts)
+static int entry_in_range(const MapEntry *e, const Options *opts)
 {
     if (!opts->filter_addr)
         return 1;

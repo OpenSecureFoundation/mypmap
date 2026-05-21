@@ -19,5 +19,5 @@ jobs:
       run: gcc -Iinclude src/*.c -o mypmap
 
     - name: Compiler les tests
-      # Compilation spécifique pour ton fichier test_procfs.c
-      run: gcc -Iinclude tests/test_procfs.c src/*.c -o test_procfs
+      # src/main.c exclu pour éviter la double définition de main
+      run: gcc -Iinclude tests/test_procfs.c src/procfs.c src/format.c src/options.c -o test_procfs
