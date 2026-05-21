@@ -1,0 +1,23 @@
+name: Compilation Projet C
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Récupération du code
+      uses: actions/checkout@v4
+
+    - name: Compiler le programme principal
+      # Utilisation de -Iinclude pour indiquer où se trouvent tes fichiers .h
+      run: gcc -Iinclude src/*.c -o mypmap
+
+    - name: Compiler les tests
+      # Compilation spécifique pour ton fichier test_procfs.c
+      run: gcc -Iinclude tests/test_procfs.c src/*.c -o test_procfs
