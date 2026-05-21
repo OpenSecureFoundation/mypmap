@@ -1,44 +1,52 @@
 /* procfs.h */
-
 #ifndef PROCFS_H
 #define PROCFS_H
 
-/*
-** MapEntry = une zone memoire du processus
-** Quand tu tapes "cat /proc/425/maps" tu vois des lignes comme :
-** 5f0a42cbe000-5f0a42cee000 r--p 00000000 08:20 123456 /bin/bash
-** Chaque ligne devient une MapEntry
-*/
-typedef struct
-{
-    unsigned long debut;        /* adresse de debut  : 5f0a42cbe000 */
-    unsigned long fin;          /* adresse de fin    : 5f0a42cee000 */
-    char          perms[6];     /* permissions       : r--p          */
-    unsigned long offset;       /* offset            : 00000000      */
-    char          device[12];   /* peripherique      : 08:20         */
-    unsigned long inode;        /* numero inode      : 123456        */
-    char          nom[256];     /* nom du fichier    : /bin/bash     */
-    unsigned long taille_kb;    /* taille en kB      : 192           */
-    unsigned long rss;          /* memoire reelle kB : pour -x       */
-    unsigned long dirty;        /* memoire modifiee  : pour -x       */
+#include <sys/types.h>
+
+typedef struct {
+    unsigned long addr_start;
+    unsigned long addr_end;
+    char          perms[6];
+    unsigned long offset;
+    unsigned int  dev_major;
+    unsigned int  dev_minor;
+    unsigned long inode;
+    char          pathname[256];
+
+    /* Smaps fields */
+    unsigned long size_kb;
+    unsigned long rss_kb;
+    unsigned long pss_kb;
+    unsigned long shared_clean_kb;
+    unsigned long shared_dirty_kb;
+    unsigned long private_clean_kb;
+    unsigned long private_dirty_kb;
+    unsigned long referenced_kb;
+    unsigned long anonymous_kb;
+    unsigned long swap_kb;
+    unsigned long swap_pss_kb;
+    unsigned long locked_kb;
 } MapEntry;
 
-/*
-** MapTable = un tableau qui contient toutes les MapEntry
-** Il grandit automatiquement quand on ajoute des entrees
-*/
-typedef struct
-{
-    MapEntry *entrees;   /* le tableau de zones memoire */
-    int       nombre;    /* combien d'entrees on a      */
-    int       capacite;  /* taille maximale du tableau  */
-} MapTable;
+typedef struct {
+    MapEntry *entries;
+    size_t    count;
+    size_t    capacity;
+} MapList;
 
-/* Les fonctions qu'on va ecrire dans procfs.c */
-int  read_proc_info(int pid, char *nom, char *commande);
-int  read_maps(int pid, MapTable *table);
-int  parse_maps_line(char *ligne, MapEntry *entree);
-int  append_entry(MapTable *table, MapEntry *entree);
-void free_table(MapTable *table);
+typedef struct {
+    pid_t pid;
+    char  name[256];
+    char  cmdline[1024];
+} ProcInfo;
+
+MapList* maplist_create(void);
+void     maplist_free(MapList *list);
+int      read_proc_info(pid_t pid, ProcInfo *info);
+MapList* read_maps(pid_t pid);
+int      read_smaps(pid_t pid, MapList *list);
+int      parse_maps_line(const char *line, MapEntry *entry);
+int      append_entry(MapList *list, const MapEntry *entry);
 
 #endif

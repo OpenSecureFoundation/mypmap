@@ -14,22 +14,22 @@
 static const char *get_mapping_name(const MapEntry *e, const Options *opts)
 {
     (void)opts;
-    if (e->pathname[0] != '\0')
+    if (e->pathname[0] != '\0' && e->pathname[0] != ' ')
         return e->pathname;
     return "[ anon ]";
 }
 
 static unsigned long entry_kbytes(const MapEntry *e)
 {
-    return (e->addr_end - e->addr_start) / 1024UL;
+    return e->size_kb;
 }
 
 int entry_in_range(const MapEntry *e, const Options *opts)
 {
-    if (!opts->filter_range)
+    if (!opts->filter_addr)
         return 1;
-    return (e->addr_start >= opts->range_lo &&
-            e->addr_end <= opts->range_hi);
+    return (e->addr_start >= opts->addr_lo &&
+            e->addr_end <= opts->addr_hi);
 }
 
 /* =================
@@ -235,11 +235,11 @@ void print_device(const ProcInfo *info, const MapList *list,
 void print_output(const ProcInfo *info, const MapList *list,
                   const Options *opts)
 {
-    if (opts->mode_XX)
+    if (opts->show_very_extended)
         print_XX(info, list, opts);
-    else if (opts->mode_extended)
+    else if (opts->show_extended)
         print_extended(info, list, opts);
-    else if (opts->mode_device)
+    else if (opts->show_device)
         print_device(info, list, opts);
     else
         print_standard(info, list, opts);
