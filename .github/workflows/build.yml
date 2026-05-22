@@ -21,3 +21,9 @@ jobs:
     - name: Compiler les tests
       # src/main.c exclu pour éviter la double définition de main
       run: gcc -Iinclude tests/test_procfs.c src/procfs.c src/format.c src/options.c -o test_procfs
+    
+    - name: Sauvegarder le programme compilé
+      uses: actions/upload-artifact@v4
+      with:
+        name: mon-programme-ubuntu
+        path: mypmap
