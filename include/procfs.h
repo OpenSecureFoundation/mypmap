@@ -14,7 +14,7 @@ typedef struct {
     unsigned long inode;
     char          pathname[256];
 
-    /* Smaps fields */
+    /* Champs smaps de base (-x, -X) */
     unsigned long size_kb;
     unsigned long rss_kb;
     unsigned long pss_kb;
@@ -27,6 +27,20 @@ typedef struct {
     unsigned long swap_kb;
     unsigned long swap_pss_kb;
     unsigned long locked_kb;
+
+    /* Champs smaps très étendus (-XX) */
+    unsigned long kernel_page_size_kb;
+    unsigned long mmu_page_size_kb;
+    unsigned long pss_dirty_kb;
+    unsigned long lazy_free_kb;
+    unsigned long anon_huge_pages_kb;
+    unsigned long shmem_pmd_mapped_kb;
+    unsigned long file_pmd_mapped_kb;
+    unsigned long shared_hugetlb_kb;
+    unsigned long private_hugetlb_kb;
+    unsigned long ksm_kb;
+    int           thp_eligible;
+    char          vm_flags[256];
 } MapEntry;
 
 typedef struct {

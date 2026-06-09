@@ -108,25 +108,55 @@ int read_smaps(pid_t pid, MapList *list) {
     FILE *f = fopen(chemin, "r");
     if (!f) return -1;
 
-    char ligne[512];
-    size_t idx = 0;
+    char   ligne[512];
+    size_t idx  = 0;
+
     while (fgets(ligne, sizeof(ligne), f) && idx < list->count) {
-        unsigned long val;
-        if (strstr(ligne, "Size:") == ligne) idx++; // New segment
+        unsigned long val  = 0;
+        int           ival = 0;
+
+        /* Chaque segment smaps commence par la ligne "Size:" */
+        if (strstr(ligne, "Size:") == ligne) idx++;
         if (idx == 0) continue;
-        MapEntry *e = &list->entries[idx-1];
-        
-        if (sscanf(ligne, "Rss: %lu", &val) == 1) e->rss_kb = val;
-        else if (sscanf(ligne, "Pss: %lu", &val) == 1) e->pss_kb = val;
-        else if (sscanf(ligne, "Shared_Clean: %lu", &val) == 1) e->shared_clean_kb = val;
-        else if (sscanf(ligne, "Shared_Dirty: %lu", &val) == 1) e->shared_dirty_kb = val;
+
+        MapEntry *e = &list->entries[idx - 1];
+
+        /* --- Champs de base (-x, -X) --- */
+        if      (sscanf(ligne, "Rss: %lu",           &val) == 1) e->rss_kb           = val;
+        else if (sscanf(ligne, "Pss: %lu",           &val) == 1) e->pss_kb           = val;
+        else if (sscanf(ligne, "Shared_Clean: %lu",  &val) == 1) e->shared_clean_kb  = val;
+        else if (sscanf(ligne, "Shared_Dirty: %lu",  &val) == 1) e->shared_dirty_kb  = val;
         else if (sscanf(ligne, "Private_Clean: %lu", &val) == 1) e->private_clean_kb = val;
         else if (sscanf(ligne, "Private_Dirty: %lu", &val) == 1) e->private_dirty_kb = val;
-        else if (sscanf(ligne, "Referenced: %lu", &val) == 1) e->referenced_kb = val;
-        else if (sscanf(ligne, "Anonymous: %lu", &val) == 1) e->anonymous_kb = val;
-        else if (sscanf(ligne, "Swap: %lu", &val) == 1) e->swap_kb = val;
-        else if (sscanf(ligne, "SwapPss: %lu", &val) == 1) e->swap_pss_kb = val;
-        else if (sscanf(ligne, "Locked: %lu", &val) == 1) e->locked_kb = val;
+        else if (sscanf(ligne, "Referenced: %lu",    &val) == 1) e->referenced_kb    = val;
+        else if (sscanf(ligne, "Anonymous: %lu",     &val) == 1) e->anonymous_kb     = val;
+        else if (sscanf(ligne, "Swap: %lu",          &val) == 1) e->swap_kb          = val;
+        else if (sscanf(ligne, "SwapPss: %lu",       &val) == 1) e->swap_pss_kb      = val;
+        else if (sscanf(ligne, "Locked: %lu",        &val) == 1) e->locked_kb        = val;
+
+        /* --- Champs très étendus (-XX) --- */
+        else if (sscanf(ligne, "KernelPageSize: %lu",  &val)  == 1) e->kernel_page_size_kb  = val;
+        else if (sscanf(ligne, "MMUPageSize: %lu",     &val)  == 1) e->mmu_page_size_kb     = val;
+        else if (sscanf(ligne, "Pss_Dirty: %lu",       &val)  == 1) e->pss_dirty_kb         = val;
+        else if (sscanf(ligne, "LazyFree: %lu",        &val)  == 1) e->lazy_free_kb         = val;
+        else if (sscanf(ligne, "AnonHugePages: %lu",   &val)  == 1) e->anon_huge_pages_kb   = val;
+        else if (sscanf(ligne, "ShmemPmdMapped: %lu",  &val)  == 1) e->shmem_pmd_mapped_kb  = val;
+        else if (sscanf(ligne, "FilePmdMapped: %lu",   &val)  == 1) e->file_pmd_mapped_kb   = val;
+        else if (sscanf(ligne, "Shared_Hugetlb: %lu",  &val)  == 1) e->shared_hugetlb_kb    = val;
+        else if (sscanf(ligne, "Private_Hugetlb: %lu", &val)  == 1) e->private_hugetlb_kb   = val;
+        else if (sscanf(ligne, "KSM: %lu",             &val)  == 1) e->ksm_kb               = val;
+        else if (sscanf(ligne, "THPeligible: %d",      &ival) == 1) e->thp_eligible         = ival;
+        else if (strncmp(ligne, "VmFlags:", 8) == 0) {
+            /* Extraire la liste de flags : tout ce qui suit "VmFlags: " */
+            const char *flags = ligne + 8;
+            while (*flags == ' ') flags++;
+            strncpy(e->vm_flags, flags, sizeof(e->vm_flags) - 1);
+            e->vm_flags[sizeof(e->vm_flags) - 1] = '\0';
+            /* Supprimer le saut de ligne final */
+            size_t len = strlen(e->vm_flags);
+            if (len > 0 && e->vm_flags[len - 1] == '\n')
+                e->vm_flags[len - 1] = '\0';
+        }
     }
     fclose(f);
     return 0;

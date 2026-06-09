@@ -27,7 +27,7 @@ int main (int argc, char *argv[])
             continue;
         }
 
-        if (opts.show_extended || opts.show_very_extended)
+        if (opts.show_extended || opts.show_very_extended || opts.show_very_very_extended)
             read_smaps(pid, maps);
         
         print_output(&info, maps, &opts);
