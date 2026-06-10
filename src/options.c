@@ -1,6 +1,9 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <getopt.h>
 #include "options.h"
 
@@ -12,6 +15,8 @@ static const struct option long_opts[] =
     {"quiet",          no_argument,       NULL, 'q'},
     {"show-path",      no_argument,       NULL, 'p'},
     {"range",          required_argument, NULL, 'A'},
+    {"read-rc",        no_argument,       NULL, 'c'},
+    {"read-rc-from",   required_argument, NULL, 'C'},
     {"version",        no_argument,       NULL, 'V'},
     {"help",           no_argument,       NULL, 'h'},
     {NULL, 0, NULL, 0}
@@ -38,6 +43,12 @@ static void usage(const char *prog, FILE *flux)
         "  -A lo,hi               Restreint l'affichage à la plage d'adresses [lo, hi]\n"
         "                         (valeurs hexadécimales, ex: -A 7f000000,7fffffff)\n"
         "\n"
+        "Options de configuration :\n"
+        "  -c, --read-rc          Lit la configuration des colonnes depuis ~/.pmaprc\n"
+        "                         (une colonne smaps par ligne, ex: Rss, Pss, Swap...)\n"
+        "                         Active automatiquement le mode -X si non spécifié\n"
+        "  -C, --read-rc-from <f> Identique à -c mais lit le fichier <f> à la place\n"
+        "\n"
         "Autres :\n"
         "  -V, --version          Affiche la version et quitte\n"
         "  -h, --help             Affiche cette aide et quitte\n"
@@ -45,8 +56,10 @@ static void usage(const char *prog, FILE *flux)
         "Exemples :\n"
         "  %s 1234\n"
         "  %s -x 1234 5678\n"
-        "  %s -XX -q 1234\n",
-        prog, prog, prog, prog);
+        "  %s -XX -q 1234\n"
+        "  %s -c -X 1234\n"
+        "  %s -C /tmp/ma_config.rc 1234\n",
+        prog, prog, prog, prog, prog, prog);
 }
 
 static int parse_range(const char *arg, Options *opts)
@@ -63,13 +76,58 @@ static int parse_range(const char *arg, Options *opts)
     return 0;
 }
 
+/* Lit un fichier rc et remplit rc->noms[]/rc->nb.
+ * Ignore les lignes vides et les commentaires (lignes commençant par #).
+ * Retourne 0 si le fichier a été lu, -1 s'il est inaccessible. */
+int lire_fichier_rc(const char *chemin, RcConfig *rc)
+{
+    FILE *f = fopen(chemin, "r");
+    if (!f) {
+        fprintf(stderr, "mypmap: impossible d'ouvrir le fichier rc '%s' : %s\n",
+                chemin, strerror(errno));
+        return -1;
+    }
+
+    rc->nb = 0;
+    char ligne[256];
+
+    while (fgets(ligne, sizeof(ligne), f)) {
+        /* Supprimer saut de ligne et espaces finaux */
+        size_t len = strlen(ligne);
+        while (len > 0 && (ligne[len - 1] == '\n' || ligne[len - 1] == '\r'
+                           || ligne[len - 1] == ' ' || ligne[len - 1] == '\t'))
+            ligne[--len] = '\0';
+
+        /* Avancer jusqu'au premier caractère non-blanc */
+        const char *debut = ligne;
+        while (*debut == ' ' || *debut == '\t') debut++;
+
+        /* Ignorer les lignes vides et les commentaires */
+        if (*debut == '\0' || *debut == '#') continue;
+
+        if (rc->nb >= RC_MAX_COLONNES) {
+            fprintf(stderr,
+                    "mypmap: fichier rc '%s' : trop de colonnes (max %d), "
+                    "les suivantes sont ignorées\n", chemin, RC_MAX_COLONNES);
+            break;
+        }
+
+        strncpy(rc->noms[rc->nb], debut, RC_NOM_MAX - 1);
+        rc->noms[rc->nb][RC_NOM_MAX - 1] = '\0';
+        rc->nb++;
+    }
+
+    fclose(f);
+    return 0;
+}
+
 int parse_options(int argc, char *argv[], Options *opts)
 
 {
     memset(opts, 0, sizeof(*opts));
 
     int c;
-    while ((c = getopt_long(argc, argv, "xXdqpA:Vh", long_opts, NULL)) != -1)
+    while ((c = getopt_long(argc, argv, "xXdqpA:cC:Vh", long_opts, NULL)) != -1)
     {
         switch (c)
         {
@@ -93,6 +151,16 @@ int parse_options(int argc, char *argv[], Options *opts)
                     return -1;
                 }
                 break;
+            case 'c':
+                opts->use_rc = 1;
+                break;
+            case 'C':
+                opts->rc_path = strdup(optarg);
+                if (!opts->rc_path) {
+                    fprintf(stderr, "mypmap: mémoire insuffisante\n");
+                    return -1;
+                }
+                break;
             case 'V':
                 printf("mypmap 1.0.0\n");
                 exit(EXIT_SUCCESS);
@@ -103,6 +171,37 @@ int parse_options(int argc, char *argv[], Options *opts)
                 usage(argv[0], stderr);
                 return -1;
         }
+    }
+
+    /* Charger le fichier rc si -c ou -C a été fourni */
+    if (opts->use_rc || opts->rc_path) {
+        const char *chemin = opts->rc_path;
+        char chemin_defaut[512];
+
+        /* -c sans -C : construire le chemin ~/.pmaprc */
+        if (!chemin) {
+            const char *home = getenv("HOME");
+            if (!home) {
+                fprintf(stderr,
+                        "mypmap: -c : variable HOME non définie, "
+                        "impossible de localiser ~/.pmaprc\n");
+            } else {
+                int n = snprintf(chemin_defaut, sizeof(chemin_defaut),
+                                 "%s/.pmaprc", home);
+                if (n > 0 && (size_t)n < sizeof(chemin_defaut))
+                    chemin = chemin_defaut;
+            }
+        }
+
+        if (chemin)
+            lire_fichier_rc(chemin, &opts->rc_config);
+
+        /* Si des colonnes ont été chargées et qu'aucun mode étendu
+         * n'est actif, activer -X pour que le fichier rc ait un effet. */
+        if (opts->rc_config.nb > 0
+            && !opts->show_very_extended
+            && !opts->show_very_very_extended)
+            opts->show_very_extended = 1;
     }
 
     opts->pid_count = argc - optind;
@@ -134,5 +233,8 @@ int parse_options(int argc, char *argv[], Options *opts)
 }
 void free_options(Options *opts)
 {
-    if(opts) free(opts->pids);
+    if (opts) {
+        free(opts->pids);
+        free(opts->rc_path);
+    }
 }
